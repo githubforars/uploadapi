@@ -1,6 +1,6 @@
 { config, pkgs,  ... }: {
   imports =
-    [ 
+    [
       ./hardware-configuration.nix
     ];
 
@@ -11,9 +11,9 @@
   fileSystems."/".device = "/dev/disk/by-label/nixos";
 
   swapDevices = [
-	 { 
-            device = "/dev/disk/by-label/swap"; 
-         } 
+	 {
+            device = "/dev/disk/by-label/swap";
+         }
   ];
 
   networking.firewall.allowedTCPPorts = [ 5000 ];
@@ -21,8 +21,8 @@
   users.extraUsers.demo = {
     isNormalUser = true;
     uid = 1000;
-    extraGroups = [ 
-      "wheel" 
+    extraGroups = [
+      "wheel"
     ];
   };
 
@@ -36,7 +36,8 @@
           flask
           werkzeug
           pymongo
-        ] 
+	  pep8
+        ]
       )
     )
     ( stdenv.mkDerivation rec {
@@ -47,7 +48,7 @@
           owner = "githubforars";
           repo = "uploadapi";
           rev = "master";
-          sha256 = "0wf6bih65031dhql9gwchyzw8zfjg69b17q5is9fk073fjrn3347";
+          sha256 = "08lwsv1avmzjxvq56vf5vm1ldzbn8wv9m6a1jy3z09hlsfx4cxfl";
         };
         installPhase = ''
         mkdir -p $out/bin/
@@ -68,8 +69,8 @@
       ExecStop = "pkill upload-api.py";
       Restart = "on-failure";
     };
-    wantedBy = [ 
-      "default.target" 
+    wantedBy = [
+      "default.target"
     ];
     enable = true;
    };
