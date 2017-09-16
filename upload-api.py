@@ -1,3 +1,4 @@
+#!/run/current-system/sw/bin/python3.5
 import os
 from flask import Flask, request, redirect, url_for,\
         send_from_directory, Response, jsonify, abort
