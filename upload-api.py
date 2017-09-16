@@ -1,4 +1,3 @@
-#!/run/current-system/sw/bin/python3.5
 import os
 from flask import Flask, request, redirect, url_for,\
         send_from_directory, Response, jsonify, abort
@@ -142,13 +141,36 @@ def upload_file():
         tmpfile = tmpdir + filename
         hash = check_hash(tmpfile)
         posts = db.posts
-        src = posts.find_one(
-                {
-                    "linked": "false",
-                    "filename": filename
-                    }
-                )
-        if posts.find_one(
+        if not posts.find_one({"filename": filename}):
+            print("new file")
+            if posts.find_one({"md5": hash}):
+                print("new file and matched hash")
+                src = posts.find_one(
+                    {
+                        "md5": hash,
+                        "linked": "false"
+                        },
+                    {
+                        "filename": 1
+                        }
+                    )
+                srcfile = os.path.join(basedir, src['filename'])
+                os.symlink(srcfile, basedir+filename)
+                meta = {
+                        "filename": filename,
+                        "linked": src['filename'],
+                        "md5": hash
+                        }
+                posts.remove({"filename": filename})
+                posts.insert_one(meta)
+            else:
+                print("new file but does not match any hash, so hard file")
+                shutil.move(tmpdir+filename, basedir+filename)
+                meta = {"filename": filename, "linked": "false", "md5": hash}
+                posts.remove({"filename": filename})
+                posts.insert_one(meta)
+        # if Hard file is same with upload content
+        elif posts.find_one(
                 {
                     "md5": hash,
                     "linked": "false",
@@ -156,13 +178,17 @@ def upload_file():
                     }
                 ):
             return jsonify({"stat": 'same content'})
+        # Starting to process on hard file
         elif posts.find_one(
                 {
                     "linked": "false",
                     "filename": filename
                     }
                 ):
-            if posts.find_one({"md5": hash}):
+            # if hard file is not having linked
+            # and matches other hash which is already exist
+            if posts.find_one({"md5": hash}) \
+                    and posts.find({"linked": filename}).count() == 0:
                 src = posts.find_one(
                         {"md5": hash, "linked": "false"}, {"filename": 1}
                         )
@@ -176,46 +202,99 @@ def upload_file():
                         }
                 posts.remove({"filename": filename})
                 posts.insert_one(meta)
-            elif posts.find({"linked": filename}).count() == 0:
+            # if hard file is not having linked files and
+            # does not have any matching hash already
+            elif posts.find({"linked": filename}).count() == 0 \
+                    and not posts.find_one({"md5": hash}):
+                print("if hard file is not having linked files \
+                        and does not have any matching hash already")
                 os.unlink(basedir+filename)
                 shutil.move(tmpdir+filename, basedir+filename)
                 meta = {"filename": filename, "linked": "false", "md5": hash}
                 posts.remove({"filename": filename})
                 posts.insert_one(meta)
+            # if hard file has linked files and
+            # matches other hash value on the db
+            elif posts.find({"linked": filename}).count() > 0 \
+                    and posts.find_one({"md5": hash}):
+                print("hard file has links and match hash")
+                src = posts.find_one({"linked": filename}, {"filename": 1})
+                newparant = src['filename']
+                change_parant_file(filename, newparant)
+                newsrc = posts.find_one(
+                        {"md5": hash, "linked": "false"}, {"filename": 1}
+                        )
+                newsrcfile = os.path.join(basedir, newsrc['filename'])
+                os.unlink(basedir+filename)
+                os.symlink(newsrcfile, basedir+filename)
+                meta = {
+                        "filename": filename,
+                        "linked": newsrc['filename'],
+                        "md5": hash
+                        }
+                posts.remove({"filename": filename})
+                posts.insert_one(meta)
+            # finaly left is hard file has linked files and
+            # does not match hash of any file
             else:
+                print("hard file has links and does not match hash")
                 src = posts.find_one({"linked": filename}, {"filename": 1})
                 newparant = src['filename']
                 change_parant_file(filename, newparant)
                 shutil.move(tmpdir+filename, basedir+filename)
+                meta = {
+                    "filename": filename,
+                    "linked": "false",
+                    "md5": hash
+                    }
+                posts.remove({"filename": filename})
+                posts.insert_one(meta)
+        # if soft file has same md5
         elif posts.find_one({"md5": hash, "filename": filename}):
             return jsonify({"stat": "same content"})
-        elif posts.find_one({"filename": filename}):
-            os.unlink(basedir+filename)
+        # starting soft files
+        elif posts.find_one({"filename": filename}) \
+                and not posts.find_one({
+                    "filename": filename,
+                    "linked": "false"
+                    }):
+            print("came soft 1")
+            # if new soft file matches other files hash
+            if posts.find_one({"md5": hash}):
+                print("came soft 2")
+                src = posts.find_one(
+                        {
+                            "md5": hash,
+                            "linked": "false"
+                            },
+                        {
+                            "filename": 1
+                            }
+                        )
+                srcfile = os.path.join(basedir, src['filename'])
+                os.unlink(basedir+filename)
+                os.symlink(srcfile, basedir+filename)
+                meta = {
+                        "filename": filename,
+                        "linked": src['filename'],
+                        "md5": hash
+                        }
+                posts.remove({"filename": filename})
+                posts.insert_one(meta)
+            # if soft file does not have any match, become hard file
+            else:
+                print("came 3")
+                os.unlink(basedir+filename)
+                shutil.move(tmpdir+filename, basedir+filename)
+                meta = {"filename": filename, "linked": "false", "md5": hash}
+                posts.remove({"filename": filename})
+                posts.insert_one(meta)
+        # Default action
+        else:
+            print("came 4")
             shutil.move(tmpdir+filename, basedir+filename)
             meta = {"filename": filename, "linked": "false", "md5": hash}
             posts.remove({"filename": filename})
-            posts.insert_one(meta)
-        elif posts.find_one({"md5": hash}):
-            src = posts.find_one(
-                    {
-                        "md5": hash,
-                        "linked": "false"
-                        },
-                    {
-                        "filename": 1
-                        }
-                    )
-            srcfile = os.path.join(basedir, src['filename'])
-            os.symlink(srcfile, basedir+filename)
-            meta = {
-                    "filename": filename,
-                    "linked": src['filename'],
-                    "md5": hash
-                    }
-            posts.insert_one(meta)
-        else:
-            shutil.move(tmpdir+filename, basedir+filename)
-            meta = {"filename": filename, "linked": "false", "md5": hash}
             posts.insert_one(meta)
     return jsonify({"stat": "file uploaded"})
 
@@ -231,4 +310,5 @@ def send_file(filename):
 
 
 if __name__ == '__main__':
-    app.run(debug=True, port=5000)
+    app.run(debug=True,host='0.0.0.0', port=5000)
+
