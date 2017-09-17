@@ -310,6 +310,15 @@ def send_file(filename):
         return jsonify({"stat": "wrong path or file does not exist"})
 
 
-if __name__ == '__main__':
-    app.run(debug=True,host='0.0.0.0', port=5000)
+@app.route('/files')
+@login
+def list_files():
+    postdb = posts.find()
+    filelist = []
+    for file in postdb:
+        filelist.append([file['filename']])
+    return jsonify({"stat": filelist})
 
+
+if __name__ == '__main__':
+    app.run(debug=True, host='0.0.0.0', port=5000)
